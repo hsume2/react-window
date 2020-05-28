@@ -18,6 +18,7 @@ type RenderComponentProps<T> = {|
   data: T,
   index: number,
   isScrolling?: boolean,
+  isSticky?: boolean,
   style: Object,
 |};
 type RenderComponent<T> = React$ComponentType<$Shape<RenderComponentProps<T>>>;
@@ -68,6 +69,13 @@ export type Props<T> = {|
   itemData: T,
   itemKey?: (index: number, data: T) => any,
   itemSize: itemSize,
+  itemStyle?: (
+    index: number,
+    defaultStyle: Object,
+    scrollOffset: number
+  ) => Object,
+  firstItemSticky?: boolean,
+  isFirstItemSticky?: (scrollOffset: number) => boolean,
   layout: Layout,
   onItemsRendered?: onItemsRenderedCallback,
   onScroll?: onScrollCallback,
@@ -305,8 +313,10 @@ export default function createListComponent({
         style,
         useIsScrolling,
         width,
+        firstItemSticky,
+        isFirstItemSticky,
       } = this.props;
-      const { isScrolling } = this.state;
+      const { isScrolling, scrollOffset } = this.state;
 
       // TODO Deprecate direction "horizontal"
       const isHorizontal =
@@ -320,13 +330,31 @@ export default function createListComponent({
 
       const items = [];
       if (itemCount > 0) {
-        for (let index = startIndex; index <= stopIndex; index++) {
+        const offset = firstItemSticky ? 1 : 0;
+        if (firstItemSticky) {
+          items.push(
+            createElement(children, {
+              data: itemData,
+              key: itemKey(0, itemData),
+              index: 0,
+              isScrolling: useIsScrolling ? isScrolling : undefined,
+              isSticky:
+                typeof isFirstItemSticky === 'function'
+                  ? isFirstItemSticky(scrollOffset)
+                  : false,
+              style: this._getItemStyle(0),
+            })
+          );
+        }
+
+        for (let index = startIndex + offset; index <= stopIndex; index++) {
           items.push(
             createElement(children, {
               data: itemData,
               key: itemKey(index, itemData),
               index,
               isScrolling: useIsScrolling ? isScrolling : undefined,
+              isSticky: false,
               style: this._getItemStyle(index),
             })
           );
@@ -447,7 +475,7 @@ export default function createListComponent({
     // So that List can clear cached styles and force item re-render if necessary.
     _getItemStyle: (index: number) => Object;
     _getItemStyle = (index: number): Object => {
-      const { direction, itemSize, layout } = this.props;
+      const { direction, itemSize, layout, itemStyle } = this.props;
 
       const itemStyleCache = this._getItemStyleCache(
         shouldResetStyleCacheOnItemSizeChange && itemSize,
@@ -476,6 +504,10 @@ export default function createListComponent({
           height: !isHorizontal ? size : '100%',
           width: isHorizontal ? size : '100%',
         };
+      }
+
+      if (typeof itemStyle === 'function') {
+        style = itemStyle(index, style, this.state.scrollOffset);
       }
 
       return style;
